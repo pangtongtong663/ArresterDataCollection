@@ -221,4 +221,5 @@ public void addInterceptors(InterceptorRegistry registry) {
     registry.addInterceptor(new AuthInterceptor(jwt, userMapper)).addPathPatterns("/**");
  }
 ```
-   
+## 数据库ER图
+![emage1](https://github.com/pangtongtong663/picture/blob/main/picture1.png)
