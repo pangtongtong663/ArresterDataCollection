@@ -2,6 +2,7 @@
  ## Background
  本项目由Web后端组、Web前端组和电子组合作完成，旨在为电子组的设备数据提供后台处理。本人负责该项目的后端开发。
  ## Structure
+ ![image2](https://github.com/pangtongtong663/picture/blob/main/picture2.png)
  ## Usage
  下面是本项目主要实现的功能和相关技术介绍。
  ### 管理员权限
