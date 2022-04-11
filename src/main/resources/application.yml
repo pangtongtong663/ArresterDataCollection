@@ -1,0 +1,19 @@
+server:
+  port: 8079
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3310/device?serverTimezone=UTC&useUnicode=true&characterEncoding=utf8
+    username: root
+    password: xxxx
+    tomcat:
+      test-while-idle: true
+      test-on-borrow: false
+      time-between-eviction-runs-millis: 18800
+  jackson:
+    property-naming-strategy: LOWER_CAMEL_CASE
+
+jwt:
+  secret: "hihi"
+  tokenHeader: "Authorization"
