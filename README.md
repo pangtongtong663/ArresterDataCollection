@@ -145,6 +145,80 @@ public String generateJwtToken(int user_id) {
 
     }
 ```
+### 设备创建
+设备创建时，需要提供设备的deviceId，moaName，和设备拥有者的英文名。
+
+在这里只是简单地用mybatis-plus提供的方法插入设备，同时加入查重验证即可。
+```java
+@Override
+    public void deviceCreate(DeviceCreateDto deviceCreateDto) {
+        DuplicateInfoException e = new DuplicateInfoException();
+        QueryWrapper<Device> qw = new QueryWrapper<>();
+        qw.eq("device_id", deviceCreateDto.getDeviceId());
+
+        if (deviceMapper.selectList(qw).size() != 0) {
+            e.addDuplicateInfoField("device_id");
+        }
+
+        if (e.getDuplicateInfos().size() == 0) {
+
+            Device device = Device.builder().deviceId(deviceCreateDto.getDeviceId())
+                    .moaName(deviceCreateDto.getMoaName())
+                    .usernameEn(deviceCreateDto.getUsernameEn())
+                    .build();
+
+            deviceMapper.insert(device);
+            if (deviceCreateDto.getUsernameEn().length() > 0 || !deviceCreateDto.getUsernameEn().equals("undefined")) {
+                DeviceAssociation deviceAssociation = DeviceAssociation.builder().usernameEn(deviceCreateDto.getUsernameEn())
+                        .deviceId(deviceCreateDto.getDeviceId())
+                        .build();
+                deviceAssociationMapper.insert(deviceAssociation);
+            }
+
+        } else {
+            throw e;
+        }
+    }
+```
+### 设备绑定
+为了方便查找，本项目数据库中设置device_association表，来记录设备和用户的记录关系。因此，在绑定设备的时候，首先要修改该表。如果设备已存在，对其更新即可，如果设备不存在，则在device_association表中插入数据。
+```java
+if (deviceAssociationMapper.selectList(qw).size() == 0) {
+            DeviceAssociation deviceAssociation = DeviceAssociation.builder().usernameEn(deviceBindDto.getUsernameEn())
+                    .usernameCn(deviceBindDto.getUsernameCn())
+                    .deviceId(deviceBindDto.getDeviceId())
+                    .build();
+            deviceAssociationMapper.insert(deviceAssociation);
+
+        } else {
+            DeviceAssociation deviceAssociation = deviceAssociationMapper.selectList(qw).get(0);
+            deviceAssociation.setUsernameEn(deviceBindDto.getUsernameEn());
+            deviceAssociation.setUsernameCn(deviceBindDto.getUsernameCn());
+            deviceAssociationMapper.updateById(deviceAssociation);
+   }
+``` 
+根据项目需求，为了方便管理员操作，在此没有选择对设备拥有者的信息进行错误判断，而是选择了直接将device的设备拥有者进行修改。
+```java
+QueryWrapper<Device> qw2 = new QueryWrapper<>();
+qw2.eq("device_id", deviceBindDto.getDeviceId());
+Device device = deviceMapper.selectList(qw2).get(0);
+device.setUsernameEn(deviceBindDto.getUsernameEn());
+device.setUsernameCn(deviceBindDto.getUsernameCn());
+deviceMapper.updateById(device);
+```
+
+### 数据收集
+由于要处理的数据过多，前端也需要相应的数据绘制趋势图，因此将数据分为A、B，C三相，以及把绘制趋势图所需的阻性电流，全电流等分离开，额外建表。
+
+数据创建过程有些“屎山”，在这里只体现数据存储的逻辑。
+```java
+deviceMessageAMapper.insert(deviceMessageA);
+deviceMessageBMapper.insert(deviceMessageB);
+deviceMessageCMapper.insert(deviceMessageC);
+iaMapper.insert(ia);
+irMapper.insert(ir);
+phMapper.insert(ph);
+```
 ### 根据时间来获取数据
 下面以A相电流数据为例:
 
@@ -195,8 +269,55 @@ public class MyMetaObjectHandler implements MetaObjectHandler{
 }
 ```
 
+### 自己实现的异常和返回类型
+为了更加清晰地反应错误类型，在本项目中自己实现了一些异常，以及建立了response相关的Dto。
+
+信息重复异常
+```java
+public class DuplicateInfoException extends RuntimeException{
+    private ArrayList<String> duplicateInfos = new ArrayList<>();
+
+    public DuplicateInfoException() {
+        super();
+    }
+
+    public void addDuplicateInfoField(String info) {
+        this.duplicateInfos.add(info);
+    }
+
+    public ArrayList<String> getDuplicateInfos() {
+        return this.duplicateInfos;
+    }
+}
+```
+StandardResponse
+```java
+public class StandardResponse {
+
+    public static ResponseDto<Object> ok() {
+        return new ResponseDto<>("200", "success");
+    }
+
+    public static ResponseDto<Object> ok(Object data) {
+        return new ResponseDto<>("200", "success", data);
+    }
+
+    public static ResponseDto<Object> fail() {
+        return new ResponseDto<>("400", "failed");
+    }
+    public static ResponseDto<Object> fail(Object data) {
+        return new ResponseDto<>("400", "failed", data);
+    }
+
+
+    public static ResponseDto<Object> duplicateInformation(ArrayList<String> duplicateInfos) {
+        return new ResponseDto<>("403", "duplicate information", duplicateInfos);
+    }
+
+}
+```
 ### 各项配置
-在这里由于springboot版本问题，导致添加拦截器的配置和跨域配置的顺序不同，所以会出现跨域失败的问题。因此，本项目采用过滤器来配置跨域功能。
+不同的springboot版本，会导致添加拦截器的配置和跨域配置的顺序不同，如果采用实现WebMvcConfigurer可能会出现跨域失败的问题。因此，本项目采用过滤器来配置跨域功能。
 
 跨域配置：
 ```java
@@ -222,5 +343,27 @@ public void addInterceptors(InterceptorRegistry registry) {
     registry.addInterceptor(new AuthInterceptor(jwt, userMapper)).addPathPatterns("/**");
  }
 ```
+### 其他
+在这里只介绍了本项目主要的实现逻辑和源码展示，其他功能和具体细节可以在项目源码中查看。
 ## 数据库ER图
 ![emage1](https://github.com/pangtongtong663/picture/blob/main/picture1.png)
+## docker部署
+由于团队的云服务器下载mysql版本老是出错，而且自己也没有root权限，所以本项目采用docker部署。
+
+
+首先拉取镜像，并检查是否拉取成功。
+```
+docker pull mysql:latest
+sudo docker images
+```
+接着配置和建立容器
+```
+sudo docker run -p 3310:3306 --name mysql -e MYSQL_ROOT_PASSWORD=xxxxx -d mysql:latest
+```
+通过docker连接mysql，判断mysql是否创建正确。
+```
+docker container ls
+sudo docker exec -it mysql bash
+mysql -uroot -pxxxx
+```
+最后通过navicat进行远程连接即可。
